@@ -2,6 +2,7 @@ import itertools
 import os
 import pprint
 import random
+import sys
 import time
 import math
 import typing
@@ -9,7 +10,8 @@ import typing
 CONSTANT = "常数"
 INCLUDE_TOTAL_RESTRICTION = True
 SHOW_EQUATION_GROUP = False
-
+WIN_RESULTS_ONLY = True
+sys.setrecursionlimit(2500)
 
 class MineSweeperEquation(dict):
     def __add__(self, other):
@@ -107,13 +109,13 @@ class UnitTile:
 
         return _ret
 
-    def uncover(self):
+    def _uncover(self):
         self.uncovered = True
 
         if self.number == 0 and not self.has_mine:
             for _nbr in self.nbr:
                 if not _nbr.uncovered:
-                    self.board.uncover(_nbr.x, _nbr.y)
+                    self.board._uncover(_nbr.x, _nbr.y)
 
 
 class MineSweeperBoard:
@@ -123,8 +125,9 @@ class MineSweeperBoard:
         self.size_y = _size_y
         self.mines = _mines
         self.first = True
+        self.last_updates = {}
 
-    def uncover(self, _x, _y):
+    def _uncover(self, _x, _y):
         if self.first:
             self.first = False
             rands = []
@@ -141,17 +144,21 @@ class MineSweeperBoard:
             for _i in range(min(self.mines, len(rands))):
                 self.board[rands[_i][0]][rands[_i][1]].has_mine = True
 
-        self.board[_x][_y].uncover()
+        self.board[_x][_y]._uncover()
 
     def __repr__(self):
-        ret = "-" * (self.size_x + 2) + "\n  "
+        ret = "-" * (2 * self.size_x + 5) + "\n   "
         for _i in range(self.size_x):
-            ret += str(_i % 10)
+            ret += str(_i % 10) + " "
 
         ret += "\n\n"
 
         for _j in range(self.size_y):
             ret += str(_j % 10) + " "
+            if (0, _j) in self.last_updates:
+                ret += "["
+            else:
+                ret += " "
 
             for _i in range(self.size_x):
                 if self.board[_i][_j].uncovered:
@@ -168,23 +175,40 @@ class MineSweeperBoard:
                         ret += "^"
                     else:
                         ret += "_"
+                if (_i, _j) in self.last_updates:
+                    if (_i + 1, _j) in self.last_updates:
+                        ret += "I"
+                    else:
+                        ret += "]"
+                else:
+                    if (_i + 1, _j) in self.last_updates:
+                        ret += "["
+                    else:
+                        ret += " "
 
             ret += " " + str(_j % 10)
             ret += "\n"
-        ret += "\n  "
+        ret += "\n   "
 
         for _i in range(self.size_x):
-            ret += str(_i % 10)
+            ret += str(_i % 10) + " "
 
         ret += "\n"
-        ret += "-" * (self.size_x + 2) + "\n"
+        ret += "-" * (self.size_x + 5) + "\n"
+        self.last_updates.clear()
         return ret
 
     def flag(self, _x, _y):
+        self.last_updates[(_x, _y)] = True
         self.board[_x][_y].flagged = True
 
     def del_flag(self, _x, _y):
+        self.last_updates[(_x, _y)] = True
         self.board[_x][_y].flagged = False
+
+    def user_uncover(self, _x, _y):
+        self.last_updates[(_x, _y)] = True
+        self._uncover(_x, _y)
 
     def check_win(self):
         for _i in range(self.size_x):
@@ -226,8 +250,8 @@ class AIMineSweeper(MineSweeperBoard):
         self.log = []
         self.log.append(f"{_size_x} x {_size_y}, 共 {_mines} 个雷\n")
 
-    def uncover(self, _x, _y):
-        super(AIMineSweeper, self).uncover(_x, _y)
+    def _uncover(self, _x, _y):
+        super(AIMineSweeper, self)._uncover(_x, _y)
         for _key in self.solver:
             if (_x, _y) in self.solver[_key]:
                 del self.solver[_key][(_x, _y)]
@@ -254,7 +278,7 @@ class AIMineSweeper(MineSweeperBoard):
 
             rand = random.choice(rands)
             self.log.append(f"随机翻开({rand[0]},{rand[1]})")
-            self.uncover(rand[0], rand[1])
+            self.user_uncover(rand[0], rand[1])
         else:
             for item in self.solution.items():
                 _x, _y = item[0][0], item[0][1]
@@ -263,7 +287,7 @@ class AIMineSweeper(MineSweeperBoard):
                     if self.board[_x][_y].uncovered:
                         continue
                     self.log.append(f"翻开({_x},{_y})")
-                    self.uncover(_x, _y)
+                    self.user_uncover(_x, _y)
                 else:
                     if self.board[_x][_y].flagged:
                         continue
@@ -340,7 +364,7 @@ class AIMineSweeper(MineSweeperBoard):
             self.log.append("方程组: ")
             for eq in self.solver.values():
                 self.log.append(pprint.pformat(eq, width=11451))
-            self.log.append("-" * (self.size_x + 2))
+            self.log.append("-" * (2 * self.size_x + 5))
 
         self.log.append(time.strftime("%Y年%m月%d日 %H时%M分%S秒", time.localtime(time.time())))
 
@@ -356,22 +380,24 @@ class AIMineSweeper(MineSweeperBoard):
         raise RegretError
 
 
-board = AIMineSweeper(6, 6, 20)
+board = AIMineSweeper(30, 16, 99)
 while board.check_win() == "Continue":
     board.run_once()
     board.eliminate()
 
 board.log.append(board.check_win())
 
-for i in range(board.size_x):
-    for j in range(board.size_y):
-        if not board.board[i][j].uncovered:
-            board.uncover(i, j)
+if board.check_win() == "Win" or not WIN_RESULTS_ONLY:
+    for i in range(board.size_x):
+        for j in range(board.size_y):
+            if not board.board[i][j].uncovered:
+                board.user_uncover(i, j)
 
-board.log.append(repr(board))
-os.chdir(os.getcwd() + "\\outputs\\")
-file_name = time.strftime("%Y年%m月%d日 %H时%M分%S秒", time.localtime(time.time())) + \
-            f" ({board.size_x} x {board.size_y}, {board.mines})"
+    board.log.append(repr(board))
+    os.chdir(os.getcwd() + "\\outputs\\")
+    file_name = \
+        time.strftime("%Y年%m月%d日 %H时%M分%S秒", time.localtime(time.time())) + \
+        f" ({board.size_x} x {board.size_y}, {board.mines})"
 
-with open(file_name + ".txt", "w", encoding="utf-8") as outfile:
-    outfile.write("\n".join(board.log))
+    with open(file_name + ".txt", "w", encoding="utf-8") as outfile:
+        outfile.write("\n".join(board.log))
