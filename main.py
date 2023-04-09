@@ -105,7 +105,7 @@ class MineSweeperEquation(dict):
                 _nxt -= _dp[_i][_nxt][1] * _coefs[_i]
             _ret = _ret[::-1]
             _ret = [{_keys[_i]: _ret[_i] for _i in range(_n)}]
-            pprint.pprint((_dp, self, _ret))
+            # pprint.pprint((_dp, self, _ret))
         return _ret
 
 
