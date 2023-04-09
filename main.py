@@ -10,7 +10,9 @@ import typing
 CONSTANT = "常数"
 INCLUDE_TOTAL_RESTRICTION = True
 SHOW_EQUATION_GROUP = False
+SHOW_ACTIONS = False
 WIN_RESULTS_ONLY = True
+
 sys.setrecursionlimit(2500)
 
 class MineSweeperEquation(dict):
@@ -56,7 +58,7 @@ class MineSweeperEquation(dict):
         for key in self:
             self[key] //= gcd
 
-    def solvable(self):
+    def solvable_bf(self):
         _keys = [key for key in self.keys() if key != CONSTANT]
         _coefs = [self[key] for key in _keys]
         _tmp = []
@@ -73,6 +75,38 @@ class MineSweeperEquation(dict):
 
         return [{_keys[_i]: _ret[_j][_i] for _i in range(len(_keys))}
                 for _j in range(len(_ret))]
+
+    def solvable_dp(self):
+        _keys = [key for key in self.keys() if key != CONSTANT]
+        _coefs = [self[key] for key in _keys]
+        _n = len(_keys)
+        if _n == 0:
+            return {}
+        _tmp = 0
+        _dp = [{} for _ in range(_n)]
+        _dp[0][0] = 1, 0
+        _dp[0][_coefs[0]] = 1, 1
+        for _i in range(1, _n):
+            for _j in _dp[_i - 1]:
+                _tmp = _dp[_i].get(_j + _coefs[_i], (0, None))[0]
+                _dp[_i][_j + _coefs[_i]] = _tmp + _dp[_i - 1][_j][0], 1
+                _tmp = _dp[_i].get(_j, (0, None))[0]
+                _dp[_i][_j] = _tmp + _dp[_i - 1][_j][0], 0
+        for _i in range(_n):
+            for _j in _dp[_i]:
+                if _dp[_i][_j][0] != 1:
+                    _dp[_i][_j] = 0, _dp[_i][_j][1]
+
+        _ret = []
+        if self[CONSTANT] in _dp[-1] and _dp[-1][self[CONSTANT]][0] == 1:
+            _nxt = self[CONSTANT]
+            for _i in reversed(range(_n)):
+                _ret.append(_dp[_i][_nxt][1])
+                _nxt -= _dp[_i][_nxt][1] * _coefs[_i]
+            _ret = _ret[::-1]
+            _ret = [{_keys[_i]: _ret[_i] for _i in range(_n)}]
+            pprint.pprint((_dp, self, _ret))
+        return _ret
 
 
 class UnitTile:
@@ -194,7 +228,7 @@ class MineSweeperBoard:
             ret += str(_i % 10) + " "
 
         ret += "\n"
-        ret += "-" * (self.size_x + 5) + "\n"
+        ret += "-" * (2 * self.size_x + 5) + "\n"
         self.last_updates.clear()
         return ret
 
@@ -277,7 +311,10 @@ class AIMineSweeper(MineSweeperBoard):
                     rands.append((_i, _j))
 
             rand = random.choice(rands)
-            self.log.append(f"随机翻开({rand[0]},{rand[1]})")
+            if SHOW_ACTIONS:
+                self.log.append(f"随机翻开({rand[0]},{rand[1]})")
+            else:
+                self.log.append("!随机!")
             self.user_uncover(rand[0], rand[1])
         else:
             for item in self.solution.items():
@@ -286,12 +323,14 @@ class AIMineSweeper(MineSweeperBoard):
                 if item[1] == 0:
                     if self.board[_x][_y].uncovered:
                         continue
-                    self.log.append(f"翻开({_x},{_y})")
+                    if SHOW_ACTIONS:
+                        self.log.append(f"翻开({_x},{_y})")
                     self.user_uncover(_x, _y)
                 else:
                     if self.board[_x][_y].flagged:
                         continue
-                    self.log.append(f"插旗({_x},{_y})")
+                    if SHOW_ACTIONS:
+                        self.log.append(f"插旗({_x},{_y})")
                     self.flag(_x, _y)
 
             self.solution = {}
@@ -339,17 +378,19 @@ class AIMineSweeper(MineSweeperBoard):
                 if len(value.items()) > 8:
                     continue
 
-                ret = value.solvable()
-                if len(ret) == 1:
-                    ret = ret[0]
-                    for key in ret:
+                # ret_bf = value.solvable_bf()
+                ret_dp = value.solvable_dp()
+                if len(ret_dp) == 1:
+                    ret_dp = ret_dp[0]
+                    for key in ret_dp:
                         if key in self.solution:
-                            if self.solution[key] != ret[key]:
-                                raise ContradictoryError
+                            if self.solution[key] != ret_dp[key]:
+                                print(self)
+                                raise ContradictoryError((self.solution, ret_dp))
                             else:
-                                self.solution[key] = ret[key]
+                                self.solution[key] = ret_dp[key]
                         else:
-                            self.solution[key] = ret[key]
+                            self.solution[key] = ret_dp[key]
 
         solver_keys = list(self.solver.keys())
         for _i in solver_keys:
@@ -380,24 +421,41 @@ class AIMineSweeper(MineSweeperBoard):
         raise RegretError
 
 
-board = AIMineSweeper(30, 16, 99)
-while board.check_win() == "Continue":
-    board.run_once()
-    board.eliminate()
+board = AIMineSweeper(6, 6, 15)
 
-board.log.append(board.check_win())
 
-if board.check_win() == "Win" or not WIN_RESULTS_ONLY:
-    for i in range(board.size_x):
-        for j in range(board.size_y):
-            if not board.board[i][j].uncovered:
-                board.user_uncover(i, j)
+def output():
+    global board
+    board = AIMineSweeper(board.size_x, board.size_y, board.mines)
+    while board.check_win() == "Continue":
+        board.run_once()
+        board.eliminate()
 
-    board.log.append(repr(board))
+    board.log.append(board.check_win())
+    if board.check_win() == "Win" or not WIN_RESULTS_ONLY:
+        for i in range(board.size_x):
+            for j in range(board.size_y):
+                if not board.board[i][j].uncovered:
+                    board.user_uncover(i, j)
+
+        board.log.append(repr(board))
+        to_file(board)
+
+
+def to_file(board):
     os.chdir(os.getcwd() + "\\outputs\\")
     file_name = \
         time.strftime("%Y年%m月%d日 %H时%M分%S秒", time.localtime(time.time())) + \
         f" ({board.size_x} x {board.size_y}, {board.mines})"
-
     with open(file_name + ".txt", "w", encoding="utf-8") as outfile:
         outfile.write("\n".join(board.log))
+
+
+for i in range(1):
+    print(i)
+    try:
+        output()
+    except ContradictoryError as e:
+        print(e.with_traceback(None))
+        board.log.append(repr(e))
+        to_file(board)
