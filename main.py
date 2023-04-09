@@ -422,7 +422,7 @@ class AIMineSweeper(MineSweeperBoard):
 
 
 board = AIMineSweeper(6, 6, 15)
-
+os.chdir(os.getcwd() + "\\outputs\\")
 
 def output():
     global board
@@ -443,7 +443,6 @@ def output():
 
 
 def to_file(board):
-    os.chdir(os.getcwd() + "\\outputs\\")
     file_name = \
         time.strftime("%Y年%m月%d日 %H时%M分%S秒", time.localtime(time.time())) + \
         f" ({board.size_x} x {board.size_y}, {board.mines})"
