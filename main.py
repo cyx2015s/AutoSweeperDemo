@@ -177,7 +177,8 @@ class MineSweeperBoard:
 
             for _i in range(min(self.mines, len(rands))):
                 self.board[rands[_i][0]][rands[_i][1]].has_mine = True
-
+                
+            self.mines = min(self.mines, len(rands))
         self.board[_x][_y]._uncover()
 
     def __repr__(self):
@@ -421,12 +422,14 @@ class AIMineSweeper(MineSweeperBoard):
         raise RegretError
 
 
-board = AIMineSweeper(6, 6, 15)
+size_x, size_y, mines = 9, 9, 10
+board = AIMineSweeper(size_x, size_y, mines)
 os.chdir(os.getcwd() + "\\outputs\\")
+
 
 def output():
     global board
-    board = AIMineSweeper(board.size_x, board.size_y, board.mines)
+    board = AIMineSweeper(size_x, size_y, mines)
     while board.check_win() == "Continue":
         board.run_once()
         board.eliminate()
